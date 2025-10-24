@@ -26,56 +26,53 @@ func UploadFile(c *gin.Context, db *sql.DB) {
 	}
 	defer uploadedFile.Close()
 
-	// Read all lines from the uploaded file
 	var lines []string
 	scanner := bufio.NewScanner(uploadedFile)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
 
-	// -----------------------------
-	// 1️⃣ SIMPLE VERSION (no goroutines)
-	// -----------------------------
+	// --- Sequential ---
 	startSimple := time.Now()
 	simpleStats := analyzeSimple(lines)
 	simpleTime := time.Since(startSimple)
 
-	// -----------------------------
-	// 2️⃣ GOROUTINE VERSION (chunks)
-	// -----------------------------
+	// --- Concurrent ---
 	startConcurrent := time.Now()
 	concurrentStats := analyzeConcurrent(lines)
 	concurrentTime := time.Since(startConcurrent)
 
-	// -----------------------------
-	// Save one result (e.g., goroutine version) to DB
-	// -----------------------------
-	_, err = db.Exec(`INSERT INTO file_stats 
-		(para_count, line_count, word_count, char_count, alpha_count, digit_count, vowel_count, non_vowel_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		concurrentStats["para_count"], concurrentStats["line_count"], concurrentStats["word_count"],
-		concurrentStats["char_count"], concurrentStats["alpha_count"], concurrentStats["digit_count"],
-		concurrentStats["vowel_count"], concurrentStats["non_vowel_count"])
+	// ✅ Insert into PostgreSQL
+	_, err = db.Exec(`
+		INSERT INTO file_stats 
+			(para_count, line_count, word_count, char_count, alpha_count, digit_count, vowel_count, non_vowel_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`,
+		concurrentStats["para_count"],
+		concurrentStats["line_count"],
+		concurrentStats["word_count"],
+		concurrentStats["char_count"],
+		concurrentStats["alpha_count"],
+		concurrentStats["digit_count"],
+		concurrentStats["vowel_count"],
+		concurrentStats["non_vowel_count"],
+	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB insert error: " + err.Error()})
 		return
 	}
 
-	// -----------------------------
-	// Return both results & their timings (in microseconds)
-	// -----------------------------
+	// Return JSON (no terminal logs)
 	c.JSON(http.StatusOK, gin.H{
-		"simple_result":                simpleStats,
-		"simple_time_microseconds":     simpleTime.Milliseconds(),
-		"goroutine_result":             concurrentStats,
-		"goroutine_time_microseconds":  concurrentTime.Milliseconds(),
+		"simple_result":     simpleStats,
+		"simple_time_ms":    simpleTime.Milliseconds(),
+		"goroutine_result":  concurrentStats,
+		"goroutine_time_ms": concurrentTime.Milliseconds(),
 	})
 }
 
-// --------------------------------------------------
-// 🔹 Simple Version (Normal Sequential Loop)
-// --------------------------------------------------
+// --- Simple version ---
 func analyzeSimple(lines []string) map[string]int {
 	paraCount, lineCount, wordCount := 0, 0, 0
 	charCount, alphaCount, digitCount := 0, 0, 0
@@ -123,11 +120,9 @@ func analyzeSimple(lines []string) map[string]int {
 	}
 }
 
-// --------------------------------------------------
-// 🔹 Goroutine Version (Chunked Concurrent Processing)
-// --------------------------------------------------
+// --- Goroutine version ---
 func analyzeConcurrent(lines []string) map[string]int {
-	chunkSize := 10 // lines per chunk (adjust as needed)
+	chunkSize := 2
 	numLines := len(lines)
 	numChunks := (numLines + chunkSize - 1) / chunkSize
 
@@ -177,7 +172,6 @@ func analyzeConcurrent(lines []string) map[string]int {
 				}
 			}
 
-			// Merge chunk results safely
 			mutex.Lock()
 			for k, v := range stats {
 				total[k] += v
@@ -190,12 +184,15 @@ func analyzeConcurrent(lines []string) map[string]int {
 	return total
 }
 
+// --- Delete File Record ---
 func DeleteFile(c *gin.Context, db *sql.DB) {
 	id := c.Param("id")
-	_, err := db.Exec("DELETE FROM file_stats WHERE id = ?", id)
+
+	_, err := db.Exec("DELETE FROM file_stats WHERE id = $1", id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB delete error: " + err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Record deleted successfully"})
 }

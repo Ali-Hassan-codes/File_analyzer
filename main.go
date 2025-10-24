@@ -1,28 +1,22 @@
 package main
 
 import (
-	"database/sql"
 	"log"
 
-	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
+	"file_analyzer/db"
 	"file_analyzer/routes"
+
+	"github.com/gin-gonic/gin"
 )
 
-func main() {
-	// Database connection
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/file_analysis")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// Gin setup
+func main () {
 	r := gin.Default()
+	dB := db.ConnectDB()
+	routes.RegisterRoutes(r, dB)
 
-	// Register routes
-	routes.RegisterRoutes(r, db)
-
-	// Run server
-	r.Run(":8001")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("❌ Failed to run server: %v", err)
+	}else {
+		log.Println("✅ Server running on http://localhost:8080")
+	}
 }

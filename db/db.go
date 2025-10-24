@@ -2,44 +2,25 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 )
 
 func ConnectDB() *sql.DB {
-	url := "root:@tcp(127.0.0.1:3306)/file_analysis"
-	db, err := sql.Open("mysql", url)
+	connStr := "host=localhost port=5432 user=postgres password=1234 dbname=file_analysis sslmode=disable"
+
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("❌ Error opening DB: %v", err)
 	}
 
-	createTableUser := `CREATE TABLE IF NOT EXISTS users (
-		id INT AUTO_INCREMENT PRIMARY KEY,
-		username VARCHAR(50),
-		email VARCHAR(50) UNIQUE,
-		password VARCHAR(100)
-	);`
-	_, err = db.Exec(createTableUser)
+	err = db.Ping()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("❌ Error connecting to DB: %v", err)
 	}
 
-	createTable := `CREATE TABLE IF NOT EXISTS file_stats (
-		id INT AUTO_INCREMENT PRIMARY KEY,
-		para_count INT,
-		line_count INT,
-		word_count INT,
-		char_count INT,
-		alpha_count INT,
-		digit_count INT,
-		vowel_count INT,
-		non_vowel_count INT
-	);`
-	_, err = db.Exec(createTable)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	fmt.Println("✅ Connected to PostgreSQL successfully!")
 	return db
 }
