@@ -3,7 +3,7 @@ package controllers
 import (
 	"database/sql"
 	"net/http"
-
+	"log"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -14,11 +14,28 @@ var SecretKey = []byte("my_secret_key")
 
 type User struct {
 	ID       int    `json:"id"`
-	Username string `json:"username"`
+	Name string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+func InitUsersTable(db *sql.DB) {
+	createUsersTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(100) NOT NULL,
+		email VARCHAR(150) UNIQUE NOT NULL,
+		password VARCHAR(255) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+	`
 
+	_, err := db.Exec(createUsersTable)
+	if err != nil {
+		log.Fatalf("❌ Failed to create users table: %v", err)
+	}
+
+	log.Println("✅ users table checked/created successfully.")
+}
 // ---------------- SIGNUP ----------------
 func Signup(c *gin.Context, db *sql.DB) {
 	var user User
@@ -49,8 +66,8 @@ func Signup(c *gin.Context, db *sql.DB) {
 	}
 
 	// ✅ FIXED: Correct PostgreSQL syntax
-	query := `INSERT INTO users (username, email, password) VALUES ($1, $2, $3);`
-	_, err = db.Exec(query, user.Username, user.Email, string(hashedPassword))
+	query := `INSERT INTO users (name, email, password) VALUES ($1, $2, $3);`
+	_, err = db.Exec(query, user.Name, user.Email, string(hashedPassword))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB insert error: " + err.Error()})
 		return
@@ -72,7 +89,7 @@ func Login(c *gin.Context, db *sql.DB) {
 	}
 
 	var storedPassword, username string
-	err := db.QueryRow(`SELECT username, password FROM users WHERE email = $1`, loginData.Email).
+	err := db.QueryRow(`SELECT name, password FROM users WHERE email = $1`, loginData.Email).
 		Scan(&username, &storedPassword)
 	if err != nil {
 		if err == sql.ErrNoRows {

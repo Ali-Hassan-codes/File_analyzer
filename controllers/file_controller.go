@@ -3,6 +3,7 @@ package controllers
 import (
 	"bufio"
 	"database/sql"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,6 +13,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func InitFileStatsTable(db *sql.DB) {
+	createFileStatsTable := `
+	CREATE TABLE IF NOT EXISTS file_stats (
+		id SERIAL PRIMARY KEY,
+		para_count INT,
+		line_count INT,
+		word_count INT,
+		char_count INT,
+		alpha_count INT,
+		digit_count INT,
+		vowel_count INT,
+		non_vowel_count INT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
+	_, err := db.Exec(createFileStatsTable)
+	if err != nil {
+		log.Fatalf("❌ Failed to create file_stats table: %v", err)
+	}
+
+	log.Println("✅ file_stats table checked/created successfully.")
+}
+//api - user - logic - db 
 func UploadFile(c *gin.Context, db *sql.DB) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -25,7 +50,7 @@ func UploadFile(c *gin.Context, db *sql.DB) {
 		return
 	}
 	defer uploadedFile.Close()
-
+	//service layer
 	var lines []string
 	scanner := bufio.NewScanner(uploadedFile)
 	for scanner.Scan() {
